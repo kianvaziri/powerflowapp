@@ -15,4 +15,6 @@ Current implemented test suites:
 - `tests/parser/test_matpower_parser.py`
 - `tests/ybus/test_build_ybus.py`
 - `tests/validation/test_small_case_validation.py`
+- `tests/validation/test_m2_history_export.py`
 - `tests/powerflow/test_gauss_seidel.py`
+- `tests/powerflow/test_newton_raphson.py`

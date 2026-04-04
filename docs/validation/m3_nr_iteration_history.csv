@@ -1,0 +1,3 @@
+iteration,max_power_mismatch,max_state_update,jacobian_size
+1,5.669101705422e-05,1.326881630518e-03,22
+2,1.315804479263e-10,2.264672237245e-06,22

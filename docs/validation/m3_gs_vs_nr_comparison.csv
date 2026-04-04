@@ -1,0 +1,3 @@
+method,converged,iterations,elapsed_ms,final_max_mismatch
+GS,True,39,2.538916,9.904314760001e-07
+NR,True,2,4.060750,1.315804479263e-10

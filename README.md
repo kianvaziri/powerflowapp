@@ -105,3 +105,20 @@ Generate a PNG convergence figure from the GS iteration-history CSV:
 
 Output:
 - `docs/validation/m2_gs_convergence.png`
+
+## M3 Quick Run
+
+Use these commands from repo root:
+
+```bash
+source .venv/bin/activate
+python -m pytest -q
+./scripts/run_m3_nr_demo.sh
+./scripts/run_m3_gs_nr_compare.sh
+```
+
+M3 evidence files:
+- `docs/milestones/M3_nr_checklist.md`
+- `docs/validation/M3_nr_validation_report.md`
+- `docs/validation/m3_nr_iteration_history.csv`
+- `docs/validation/m3_gs_vs_nr_comparison.csv`
