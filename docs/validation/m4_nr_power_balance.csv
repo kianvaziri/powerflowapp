@@ -1,0 +1,2 @@
+p_generation_est_mw,q_generation_est_mvar,p_generation_sched_mw,q_generation_sched_mvar,p_load_mw,q_load_mvar,p_net_injection_mw,q_net_injection_mvar,p_branch_loss_mw,q_branch_loss_mvar,p_bus_shunt_injection_mw,q_bus_shunt_injection_mvar,p_balance_mw,q_balance_mvar
+272.39327235743167,82.43754387046565,272.4,78.5,258.99999999999994,73.5,13.3932723574317,8.937543870465642,13.393272357431773,30.12238804487401,0.0,-21.1848441744073,-4.618527782440651e-14,-1.0658141036401503e-12

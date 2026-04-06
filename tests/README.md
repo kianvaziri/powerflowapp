@@ -18,3 +18,4 @@ Current implemented test suites:
 - `tests/validation/test_m2_history_export.py`
 - `tests/powerflow/test_gauss_seidel.py`
 - `tests/powerflow/test_newton_raphson.py`
+- `tests/powerflow/test_line_flow.py`

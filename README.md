@@ -122,3 +122,28 @@ M3 evidence files:
 - `docs/validation/M3_nr_validation_report.md`
 - `docs/validation/m3_nr_iteration_history.csv`
 - `docs/validation/m3_gs_vs_nr_comparison.csv`
+
+## M4 Quick Run
+
+Use these commands from repo root:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pytest -q
+./scripts/run_m4_demo.sh --method NR
+./scripts/run_m4_demo.sh --method GS
+./scripts/run_m4_ui.sh
+```
+
+M4 evidence files:
+- `docs/milestones/M4_ui_lineflow_checklist.md`
+- `docs/validation/M4_ui_lineflow_report.md`
+- `docs/validation/m4_nr_bus_results.csv`
+- `docs/validation/m4_nr_line_flows.csv`
+- `docs/validation/m4_nr_iteration_history.csv`
+- `docs/validation/m4_nr_power_balance.csv`
+- `docs/validation/m4_gs_bus_results.csv`
+- `docs/validation/m4_gs_line_flows.csv`
+- `docs/validation/m4_gs_iteration_history.csv`
+- `docs/validation/m4_gs_power_balance.csv`
