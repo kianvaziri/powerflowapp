@@ -8,10 +8,10 @@ Current implemented modules:
 - `powerflow/gs/` - Gauss-Seidel solver (M2)
 - `powerflow/nr/` - Newton-Raphson solver (M3)
 - `powerflow/line_flow.py` - branch flow/loss and system balance utilities (M4)
-- `ui/` - Streamlit web UI (M4)
+- `shortcircuit/` - three-phase + symmetrical-component fault analysis (M5)
+- `ui/` - Streamlit web UI (M4/M5)
 - `validation/` - runnable validation/demo scripts
 
 Planned next modules:
 
-- `shortcircuit/` - fault and symmetrical component analysis
 - `export/` - additional report/output formatting helpers

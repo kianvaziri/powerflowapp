@@ -147,3 +147,24 @@ M4 evidence files:
 - `docs/validation/m4_gs_line_flows.csv`
 - `docs/validation/m4_gs_iteration_history.csv`
 - `docs/validation/m4_gs_power_balance.csv`
+
+## M5 Quick Run
+
+Use these commands from repo root:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pytest -q
+./scripts/run_m5_fault_demo.sh --method NR --fault-bus 4
+./scripts/run_m5_fault_demo.sh --method GS --fault-bus 4
+./scripts/run_m4_ui.sh
+```
+
+M5 evidence files:
+- `docs/milestones/M5_short_circuit_checklist.md`
+- `docs/validation/M5_short_circuit_report.md`
+- `docs/validation/m5_nr_fault_currents.csv`
+- `docs/validation/m5_nr_post_fault_voltages.csv`
+- `docs/validation/m5_gs_fault_currents.csv`
+- `docs/validation/m5_gs_post_fault_voltages.csv`

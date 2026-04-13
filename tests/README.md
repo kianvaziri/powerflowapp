@@ -19,3 +19,4 @@ Current implemented test suites:
 - `tests/powerflow/test_gauss_seidel.py`
 - `tests/powerflow/test_newton_raphson.py`
 - `tests/powerflow/test_line_flow.py`
+- `tests/shortcircuit/test_fault_analysis.py`
