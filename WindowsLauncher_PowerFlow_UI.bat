@@ -2,10 +2,31 @@
 setlocal
 
 REM Double-click launcher for the GridSolver UI (Windows)
-cd /d "%~dp0" || exit /b 1
+set "SCRIPT_DIR=%~dp0"
+set "APP_DIR=%SCRIPT_DIR%"
+
+REM Resolve app directory robustly (handles nested folder layouts).
+if exist "%APP_DIR%requirements.txt" if exist "%APP_DIR%src\ui\streamlit_app.py" goto app_found
+if exist "%SCRIPT_DIR%powerflowapp\requirements.txt" if exist "%SCRIPT_DIR%powerflowapp\src\ui\streamlit_app.py" (
+    set "APP_DIR=%SCRIPT_DIR%powerflowapp\"
+    goto app_found
+)
+if exist "%SCRIPT_DIR%..\powerflowapp\requirements.txt" if exist "%SCRIPT_DIR%..\powerflowapp\src\ui\streamlit_app.py" (
+    set "APP_DIR=%SCRIPT_DIR%..\powerflowapp\"
+    goto app_found
+)
+
+echo Could not locate app root.
+echo Expected to find requirements.txt and src\ui\streamlit_app.py near:
+echo   %SCRIPT_DIR%
+pause
+exit /b 1
+
+:app_found
+cd /d "%APP_DIR%" || exit /b 1
 
 REM Ensure local imports resolve correctly.
-set "PYTHONPATH=%CD%"
+set "PYTHONPATH=%APP_DIR%"
 
 REM Ensure virtual environment exists.
 if not exist ".venv\Scripts\python.exe" (
@@ -24,7 +45,7 @@ if not exist ".venv\Scripts\python.exe" (
 
 REM Install/update dependencies.
 echo Installing dependencies (if needed)...
-".venv\Scripts\python.exe" -m pip install -r requirements.txt
+".venv\Scripts\python.exe" -m pip install -r "%APP_DIR%requirements.txt"
 if errorlevel 1 (
     echo Dependency installation failed.
     pause
