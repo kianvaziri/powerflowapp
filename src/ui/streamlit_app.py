@@ -71,9 +71,25 @@ def _load_case_from_selection(options: dict[str, Path], selected_case_name: str,
 def _apply_theme_css() -> None:
     css = """
     <style>
-    .stApp { background-color: #0e1117; color: #e6edf3; }
-    [data-testid="stSidebar"] { background-color: #161b22; }
-    [data-testid="stMetricValue"] { color: #e6edf3; }
+    .stApp { background-color: #0e1117; color: #e6edf3; font-size: 1.04rem; }
+    [data-testid="stSidebar"] { background-color: #161b22; font-size: 1.02rem; }
+    [data-testid="stMarkdownContainer"] p,
+    [data-testid="stCaptionContainer"] p,
+    label,
+    .stRadio label,
+    .stCheckbox label,
+    .stSelectbox label,
+    .stTextInput label,
+    .stNumberInput label,
+    .stFileUploader label {
+        font-size: 1.05rem;
+    }
+    [data-testid="stMetricValue"] { color: #e6edf3; font-size: 1.55rem; }
+    [data-testid="stMetricLabel"] p { font-size: 1.03rem; }
+    div[data-testid="stDataFrame"] { font-size: 1.04rem; }
+    [data-testid="stTable"] table { font-size: 1.1rem; }
+    [data-testid="stTable"] th,
+    [data-testid="stTable"] td { padding: 0.45rem 0.6rem; }
     .workflow-step { padding: 0.25rem 0.4rem; border-radius: 0.4rem; background: #1f2937; }
     div.stButton > button {
         width: 100%;
@@ -83,7 +99,7 @@ def _apply_theme_css() -> None:
         background: #1f2937;
         color: #e6edf3;
         font-family: Calibri, "Segoe UI", sans-serif;
-        font-size: 0.98rem;
+        font-size: 1.06rem;
         font-weight: 650;
         letter-spacing: 0.01em;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
@@ -121,6 +137,7 @@ def _apply_theme_css() -> None:
         border-radius: 0.65rem;
         min-height: 2.65rem;
         font-family: Calibri, "Segoe UI", sans-serif;
+        font-size: 1.03rem;
     }
     </style>
     """
@@ -424,6 +441,17 @@ def _write_selected_exports(
         (target_dir / filename).write_bytes(data_bytes)
 
     return target_dir
+
+
+DATAFRAME_ROW_HEIGHT = 34
+
+
+def _show_dataframe(data) -> None:
+    st.dataframe(data, use_container_width=True, row_height=DATAFRAME_ROW_HEIGHT)
+
+
+def _show_large_table(data) -> None:
+    st.table(data)
 
 
 def main() -> None:
@@ -741,7 +769,7 @@ def main() -> None:
         st.subheader("Validation Results")
         finding_rows = _validation_rows(st.session_state.validation_findings)
         if finding_rows:
-            st.dataframe(finding_rows, use_container_width=True)
+            _show_dataframe(finding_rows)
         else:
             st.success("No validation findings.")
 
@@ -753,9 +781,8 @@ def main() -> None:
 
         tab_ybus, tab_zbus = st.tabs(["Ybus", "Zbus"])
         with tab_ybus:
-            st.dataframe(
+            _show_dataframe(
                 _matrix_display_rows(st.session_state.case, ybus, data_form),
-                use_container_width=True,
             )
         with tab_zbus:
             zbus = st.session_state.zbus
@@ -763,9 +790,8 @@ def main() -> None:
                 st.warning("Zbus is not available for the current case.")
             else:
                 st.write(f"Computed from Ybus using: `{st.session_state.zbus_method}`")
-                st.dataframe(
+                _show_dataframe(
                     _matrix_display_rows(st.session_state.case, zbus, data_form),
-                    use_container_width=True,
                 )
 
     if st.session_state.powerflow_done and st.session_state.powerflow_result is not None and st.session_state.case is not None:
@@ -780,16 +806,16 @@ def main() -> None:
         p3.metric("Iterations", str(result.iterations))
 
         st.markdown(f"**Bus Voltages ({data_form_label})**")
-        st.dataframe(bus_rows, use_container_width=True)
+        _show_dataframe(bus_rows)
 
         st.markdown("**Line Flows and Losses**")
-        st.dataframe(st.session_state.line_rows, use_container_width=True)
+        _show_large_table(st.session_state.line_rows)
 
         st.markdown("**Power Balance**")
-        st.dataframe(st.session_state.balance_rows, use_container_width=True)
+        _show_large_table(st.session_state.balance_rows)
 
         st.markdown("**Iteration History**")
-        st.dataframe(st.session_state.history_rows, use_container_width=True)
+        _show_dataframe(st.session_state.history_rows)
 
     if st.session_state.fault_done and st.session_state.fault_summary is not None:
         summary = st.session_state.fault_summary
@@ -808,10 +834,10 @@ def main() -> None:
             st.warning(summary["note"])
 
         st.markdown(f"**Fault Currents ({data_form_label})**")
-        st.dataframe(current_rows, use_container_width=True)
+        _show_dataframe(current_rows)
 
         st.markdown(f"**Post-Fault Bus Voltages ({data_form_label})**")
-        st.dataframe(voltage_rows, use_container_width=True)
+        _show_dataframe(voltage_rows)
 
     if st.session_state.export_panel_open or _exportables_available():
         st.subheader("Export Results")
