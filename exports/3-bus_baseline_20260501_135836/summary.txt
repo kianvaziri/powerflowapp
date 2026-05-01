@@ -1,0 +1,8 @@
+Case: 3-bus baseline
+Data form: Polar
+Power flow solver: GS
+Converged: True
+Iterations: 1
+Fault type: 3PH
+Fault bus used: 1
+|Ia| (p.u.): 5.000000e+00
