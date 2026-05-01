@@ -1,2 +1,0 @@
-p_generation_est_mw,q_generation_est_mvar,p_generation_sched_mw,q_generation_sched_mvar,p_load_mw,q_load_mvar,p_net_injection_mw,q_net_injection_mvar,p_branch_loss_mw,q_branch_loss_mvar,p_bus_shunt_injection_mw,q_bus_shunt_injection_mvar,p_balance_mw,q_balance_mvar
-0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0,0.0

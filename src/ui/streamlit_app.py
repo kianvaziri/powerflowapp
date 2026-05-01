@@ -68,128 +68,62 @@ def _load_case_from_selection(options: dict[str, Path], selected_case_name: str,
     return loaded_case, label, source_signature
 
 
-def _apply_theme_css(dark_mode: bool) -> None:
-    if dark_mode:
-        css = """
-        <style>
-        .stApp { background-color: #0e1117; color: #e6edf3; }
-        [data-testid="stSidebar"] { background-color: #161b22; }
-        [data-testid="stMetricValue"] { color: #e6edf3; }
-        .workflow-step { padding: 0.25rem 0.4rem; border-radius: 0.4rem; background: #1f2937; }
-        div.stButton > button {
-            width: 100%;
-            min-height: 3.15rem;
-            border-radius: 0.75rem;
-            border: 1px solid #2f3947;
-            background: #1f2937;
-            color: #e6edf3;
-            font-family: Calibri, "Segoe UI", sans-serif;
-            font-size: 0.98rem;
-            font-weight: 650;
-            letter-spacing: 0.01em;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
-            transition: all 0.18s ease;
-        }
-        div.stButton > button:hover:not(:disabled) {
-            background: #273244;
-            border-color: #475569;
-        }
-        div.stButton > button:active:not(:disabled) {
-            transform: translateY(1px);
-        }
-        div.stButton > button:focus {
-            outline: none;
-            box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.35);
-        }
-        div.stButton > button[kind="primary"] {
-            background: #2563eb;
-            color: #ffffff;
-            border-color: #1d4ed8;
-        }
-        div.stButton > button[kind="primary"]:hover:not(:disabled) {
-            background: #1d4ed8;
-            border-color: #1e40af;
-        }
-        div.stButton > button:disabled {
-            background: #111827;
-            color: #6b7280;
-            border-color: #374151;
-            opacity: 1;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-        div.stDownloadButton > button {
-            border-radius: 0.65rem;
-            min-height: 2.65rem;
-            font-family: Calibri, "Segoe UI", sans-serif;
-        }
-        </style>
-        """
-    else:
-        css = """
-        <style>
-        .stApp { background: linear-gradient(180deg, #f8fafc 0%, #ffffff 45%); color: #111827; }
-        [data-testid="stSidebar"] { background-color: #f4f7fb; }
-        [data-testid="stMetricValue"] { color: #111827; }
-        .workflow-step { padding: 0.25rem 0.4rem; border-radius: 0.4rem; background: #f3f4f6; }
-        div.stButton > button {
-            width: 100%;
-            min-height: 3.15rem;
-            border-radius: 0.75rem;
-            border: 1px solid #cbd5e1;
-            background: #ffffff;
-            color: #0f172a;
-            font-family: Calibri, "Segoe UI", sans-serif;
-            font-size: 0.98rem;
-            font-weight: 650;
-            letter-spacing: 0.01em;
-            box-shadow: 0 1px 3px rgba(2, 6, 23, 0.1), 0 10px 20px rgba(2, 6, 23, 0.05);
-            transition: all 0.18s ease;
-        }
-        div.stButton > button:hover:not(:disabled) {
-            background: #f8fafc;
-            border-color: #94a3b8;
-            box-shadow: 0 4px 12px rgba(2, 6, 23, 0.14);
-        }
-        div.stButton > button:active:not(:disabled) {
-            transform: translateY(1px);
-        }
-        div.stButton > button:focus {
-            outline: none;
-            box-shadow: 0 0 0 0.2rem rgba(37, 99, 235, 0.2);
-        }
-        div.stButton > button[kind="primary"] {
-            background: #eff6ff;
-            border-color: #93c5fd;
-            color: #1d4ed8;
-        }
-        div.stButton > button[kind="primary"]:hover:not(:disabled) {
-            background: #dbeafe;
-            border-color: #60a5fa;
-            color: #1e40af;
-        }
-        div.stButton > button:disabled {
-            background: #f8fafc;
-            color: #94a3b8;
-            border-color: #e2e8f0;
-            opacity: 1;
-            cursor: not-allowed;
-            box-shadow: none;
-        }
-        div.stDownloadButton > button {
-            border-radius: 0.65rem;
-            min-height: 2.65rem;
-            border: 1px solid #cbd5e1;
-            background: #ffffff;
-            color: #0f172a;
-            font-family: Calibri, "Segoe UI", sans-serif;
-        }
-        div.stDownloadButton > button:hover:not(:disabled) {
-            background: #f8fafc;
-            border-color: #94a3b8;
-        }
-        </style>
-        """
+def _apply_theme_css() -> None:
+    css = """
+    <style>
+    .stApp { background-color: #0e1117; color: #e6edf3; }
+    [data-testid="stSidebar"] { background-color: #161b22; }
+    [data-testid="stMetricValue"] { color: #e6edf3; }
+    .workflow-step { padding: 0.25rem 0.4rem; border-radius: 0.4rem; background: #1f2937; }
+    div.stButton > button {
+        width: 100%;
+        min-height: 3.15rem;
+        border-radius: 0.75rem;
+        border: 1px solid #2f3947;
+        background: #1f2937;
+        color: #e6edf3;
+        font-family: Calibri, "Segoe UI", sans-serif;
+        font-size: 0.98rem;
+        font-weight: 650;
+        letter-spacing: 0.01em;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        transition: all 0.18s ease;
+    }
+    div.stButton > button:hover:not(:disabled) {
+        background: #273244;
+        border-color: #475569;
+    }
+    div.stButton > button:active:not(:disabled) {
+        transform: translateY(1px);
+    }
+    div.stButton > button:focus {
+        outline: none;
+        box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.35);
+    }
+    div.stButton > button[kind="primary"] {
+        background: #2563eb;
+        color: #ffffff;
+        border-color: #1d4ed8;
+    }
+    div.stButton > button[kind="primary"]:hover:not(:disabled) {
+        background: #1d4ed8;
+        border-color: #1e40af;
+    }
+    div.stButton > button:disabled {
+        background: #111827;
+        color: #6b7280;
+        border-color: #374151;
+        opacity: 1;
+        cursor: not-allowed;
+        box-shadow: none;
+    }
+    div.stDownloadButton > button {
+        border-radius: 0.65rem;
+        min-height: 2.65rem;
+        font-family: Calibri, "Segoe UI", sans-serif;
+    }
+    </style>
+    """
     st.markdown(css, unsafe_allow_html=True)
 
 
@@ -496,17 +430,15 @@ def main() -> None:
     st.set_page_config(page_title="GridSolver", layout="wide")
     _init_state()
 
-    top1, top2, top3 = st.columns([4, 1, 1])
+    top1, top2 = st.columns([4, 1])
     with top1:
         st.markdown("##### GridSolver")
         st.caption("Workflow: Load File -> Validate -> Build Ybus -> Power Flow -> Fault Study -> Export")
     with top2:
-        dark_mode = st.toggle("Dark Theme", value=True)
-    with top3:
         data_form_label = st.radio("Data Form", ["Polar", "Rectangular"], horizontal=False)
     data_form = "polar" if data_form_label == "Polar" else "rectangular"
 
-    _apply_theme_css(dark_mode)
+    _apply_theme_css()
 
     options = _default_case_options()
     fault_type_map = _fault_type_options()
