@@ -168,3 +168,27 @@ M5 evidence files:
 - `docs/validation/m5_nr_post_fault_voltages.csv`
 - `docs/validation/m5_gs_fault_currents.csv`
 - `docs/validation/m5_gs_post_fault_voltages.csv`
+
+## Final Submission Quick Run
+
+Use these commands from repo root:
+
+```bash
+source .venv/bin/activate
+python -m pip install -r requirements.txt
+python -m pytest -q
+./scripts/run_final_demo.sh --fault-bus 4 --tolerance 1e-6 --max-iterations 200
+./scripts/run_m4_ui.sh
+```
+
+Final evidence files:
+
+- `docs/milestones/Final_submission_checklist.md`
+- `docs/validation/Final_submission_validation_report.md`
+- `docs/validation/final_ieee14_powerflow_summary.csv`
+- `docs/validation/final_ieee14_fault_summary.csv`
+- `docs/validation/final_ieee14_fault_currents.csv`
+- `docs/validation/final_ieee14_post_fault_voltages.csv`
+- `docs/validation/final_submission_summary.txt`
+- `docs/reports/group16_final_report_draft.md`
+- `docs/ai-usage/2026-05-01_final_submission_ai_log.md`

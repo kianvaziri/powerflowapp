@@ -1,0 +1,2 @@
+fault_type,fault_bus,zf_r_pu,zf_x_pu,prefault_solver,prefault_converged,ia_mag_pu,ib_mag_pu,ic_mag_pu
+3PH,4,0.0,0.0,NR,True,12.114767976807421,12.114767976807418,12.11476797680742

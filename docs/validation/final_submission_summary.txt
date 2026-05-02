@@ -1,0 +1,12 @@
+Final submission validation summary
+Case: /Users/kianvaziri/Desktop/MSEE/Spring26/ee4310/powerflowapp-main/powerflowapp/data/raw/ieee14/case14_sample.m
+Tolerance (p.u.): 1.00e-06
+Max iterations: 200
+GS converged: True
+NR converged: True
+Prefault method used for fault demo: NR
+Prefault converged: True
+3PH fault bus: 4
+3PH |Ia| (p.u.): 12.114768
+Reasonable tolerance check (<=1e-6): True
+Overall status: PASS

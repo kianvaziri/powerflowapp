@@ -1,0 +1,3 @@
+method,converged,iterations,tolerance_pu,max_iterations,final_max_mismatch_pu,vm_min_pu,vm_max_pu,p_balance_mw,q_balance_mvar
+GS,True,39,1e-06,200,9.904314760000865e-07,1.01,1.09,5.3290705182007514e-14,-1.0622613899613498e-12
+NR,True,2,1e-06,200,1.3158044792627166e-10,1.01,1.09,-4.618527782440651e-14,-1.0658141036401503e-12
