@@ -350,6 +350,56 @@ def _sequence_map_from_json(text: str, field_name: str) -> dict[int, float]:
     return out
 
 
+def _parse_branch_key(raw_key: str, field_name: str) -> tuple[int, int]:
+    token = raw_key.strip()
+    if "-" in token:
+        left, right = token.split("-", 1)
+    elif ":" in token:
+        left, right = token.split(":", 1)
+    elif "," in token:
+        left, right = token.split(",", 1)
+    else:
+        raise ValueError(f"{field_name} key '{raw_key}' must use 'from-to' format")
+
+    fbus = int(left.strip())
+    tbus = int(right.strip())
+    if fbus <= tbus:
+        return fbus, tbus
+    return tbus, fbus
+
+
+def _branch_scale_map_from_json(text: str, field_name: str) -> dict[tuple[int, int], float]:
+    stripped = text.strip()
+    if stripped == "":
+        return {}
+
+    try:
+        payload = json.loads(stripped)
+    except json.JSONDecodeError as exc:
+        raise ValueError(f"{field_name} must be valid JSON") from exc
+
+    if not isinstance(payload, dict):
+        raise ValueError(f"{field_name} must be a JSON object mapping 'from-to' -> scale")
+
+    out: dict[tuple[int, int], float] = {}
+    for key, value in payload.items():
+        parsed = _parse_branch_key(str(key), field_name)
+        out[parsed] = float(value)
+    return out
+
+
+def _branch_block_set_from_text(text: str, field_name: str) -> set[tuple[int, int]]:
+    stripped = text.strip()
+    if stripped == "":
+        return set()
+
+    chunks = [part.strip() for part in stripped.split(",") if part.strip()]
+    out: set[tuple[int, int]] = set()
+    for chunk in chunks:
+        out.add(_parse_branch_key(chunk, field_name))
+    return out
+
+
 def _ybus_rows(case, ybus: np.ndarray, data_form: str) -> list[dict[str, float | int]]:
     use_polar = data_form == "polar"
     bus_ids = [bus.bus_i for bus in case.buses]
@@ -517,6 +567,24 @@ def main() -> None:
 
     with st.sidebar.expander("Sequence Data (Advanced / optional)"):
         default_xdpp = st.number_input("Default X''d (p.u.)", min_value=0.01, max_value=10.0, value=0.2, step=0.01)
+        branch_zero_seq_scale = st.number_input(
+            "Branch Z0/Z1 scale",
+            min_value=0.1,
+            max_value=20.0,
+            value=2.5,
+            step=0.1,
+        )
+        fault_include_bus_shunts = st.checkbox("Include bus shunts in sequence networks", value=False)
+        fault_include_line_charging = st.checkbox("Include line charging in sequence networks", value=False)
+        branch_scale_text = st.text_area(
+            "Branch Z0/Z1 overrides (JSON: {'4-7': 3.0})",
+            value="{}",
+            height=80,
+        )
+        blocked_branch_text = st.text_input(
+            "Zero-sequence blocked branches (comma list: 4-7,4-9)",
+            value="",
+        )
         x1_text = st.text_area("X1 overrides by bus (JSON)", value="{}", height=80)
         x2_text = st.text_area("X2 overrides by bus (JSON)", value="{}", height=80)
         x0_text = st.text_area("X0 overrides by bus (JSON)", value="{}", height=80)
@@ -698,6 +766,11 @@ def main() -> None:
                 seq_x1 = _sequence_map_from_json(x1_text, "X1 overrides")
                 seq_x2 = _sequence_map_from_json(x2_text, "X2 overrides")
                 seq_x0 = _sequence_map_from_json(x0_text, "X0 overrides")
+                branch_scale_map = _branch_scale_map_from_json(branch_scale_text, "Branch Z0/Z1 overrides")
+                blocked_zero_seq = _branch_block_set_from_text(
+                    blocked_branch_text,
+                    "Zero-sequence blocked branches",
+                )
 
                 selected_fault_bus = fault_bus
                 fault_note = ""
@@ -721,6 +794,11 @@ def main() -> None:
                     gen_x1_pu_by_bus=seq_x1,
                     gen_x2_pu_by_bus=seq_x2,
                     gen_x0_pu_by_bus=seq_x0,
+                    branch_zero_seq_scale=float(branch_zero_seq_scale),
+                    branch_zero_seq_scale_by_branch=branch_scale_map,
+                    zero_seq_blocked_branches=blocked_zero_seq,
+                    include_bus_shunts=bool(fault_include_bus_shunts),
+                    include_line_charging=bool(fault_include_line_charging),
                 )
 
                 st.session_state.fault_done = True
@@ -733,6 +811,11 @@ def main() -> None:
                     "fault_bus_used": int(selected_fault_bus),
                     "fault_impedance": complex(float(zf_r), float(zf_x)),
                     "ia_mag": float(abs(fault_result.ia_pu)),
+                    "branch_zero_seq_scale": float(branch_zero_seq_scale),
+                    "branch_scale_override_count": len(branch_scale_map),
+                    "blocked_zero_seq_count": len(blocked_zero_seq),
+                    "include_bus_shunts": bool(fault_include_bus_shunts),
+                    "include_line_charging": bool(fault_include_line_charging),
                     "note": fault_note,
                 }
                 st.success("Fault study completed.")
@@ -830,6 +913,14 @@ def main() -> None:
 
         zf = summary["fault_impedance"]
         st.write(f"Fault impedance Zf (p.u.): `{zf.real:.4f} + j{zf.imag:.4f}`")
+        st.write(
+            "Sequence network options: "
+            f"Z0/Z1 scale={summary['branch_zero_seq_scale']:.2f}, "
+            f"branch overrides={summary['branch_scale_override_count']}, "
+            f"blocked Z0 branches={summary['blocked_zero_seq_count']}, "
+            f"include bus shunts={summary['include_bus_shunts']}, "
+            f"include line charging={summary['include_line_charging']}"
+        )
         if summary["note"]:
             st.warning(summary["note"])
 

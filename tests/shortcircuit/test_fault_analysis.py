@@ -26,7 +26,13 @@ def test_sequence_ybus_includes_generator_subtransient_reactance() -> None:
     case = parse_matpower_case(_data_path("small_cases", "case3_sample.m"))
     y_base = build_ybus(case)
 
-    y1, y2, y0 = build_sequence_ybus(case, default_gen_xdpp_pu=0.2)
+    y1, y2, y0 = build_sequence_ybus(
+        case,
+        default_gen_xdpp_pu=0.2,
+        branch_zero_seq_scale=1.0,
+        include_bus_shunts=True,
+        include_line_charging=True,
+    )
 
     # Bus 1 has an online generator in case3; adding 1/(j*0.2) = -j5 to diagonal.
     expected_delta = 1.0 / (1j * 0.2)
@@ -106,3 +112,82 @@ def test_llg_fault_returns_finite_currents_and_voltages() -> None:
     assert all(np.isfinite(np.abs(result.post_va_pu)))
     assert all(np.isfinite(np.abs(result.post_vb_pu)))
     assert all(np.isfinite(np.abs(result.post_vc_pu)))
+
+
+def test_zero_sequence_scaling_changes_ground_fault_level() -> None:
+    case, v_prefault = _prefault_solution(_data_path("ieee14", "case14_sample.m"))
+
+    unscaled = analyze_fault(
+        case=case,
+        pre_fault_voltages=v_prefault,
+        fault_bus=4,
+        fault_type="LG",
+        fault_impedance_pu=0.0,
+        branch_zero_seq_scale=1.0,
+    )
+    scaled = analyze_fault(
+        case=case,
+        pre_fault_voltages=v_prefault,
+        fault_bus=4,
+        fault_type="LG",
+        fault_impedance_pu=0.0,
+        branch_zero_seq_scale=2.5,
+    )
+
+    assert abs(scaled.z0_th_pu) > abs(unscaled.z0_th_pu)
+    assert abs(scaled.ia_pu) < abs(unscaled.ia_pu)
+
+
+def test_three_phase_fault_independent_of_zero_sequence_scaling() -> None:
+    case, v_prefault = _prefault_solution(_data_path("ieee14", "case14_sample.m"))
+
+    result_1 = analyze_fault(
+        case=case,
+        pre_fault_voltages=v_prefault,
+        fault_bus=4,
+        fault_type="3PH",
+        fault_impedance_pu=0.0,
+        branch_zero_seq_scale=1.0,
+    )
+    result_2 = analyze_fault(
+        case=case,
+        pre_fault_voltages=v_prefault,
+        fault_bus=4,
+        fault_type="3PH",
+        fault_impedance_pu=0.0,
+        branch_zero_seq_scale=2.5,
+    )
+
+    assert result_1.ia_pu == pytest.approx(result_2.ia_pu, abs=1e-10)
+
+
+def test_branch_zero_sequence_override_changes_zero_sequence_coupling() -> None:
+    case = parse_matpower_case(_data_path("small_cases", "case3_sample.m"))
+
+    _y1_a, _y2_a, y0_base = build_sequence_ybus(
+        case,
+        branch_zero_seq_scale=1.0,
+    )
+    _y1_b, _y2_b, y0_override = build_sequence_ybus(
+        case,
+        branch_zero_seq_scale=1.0,
+        branch_zero_seq_scale_by_branch={(1, 2): 5.0},
+    )
+
+    i = 0
+    j = 1
+    assert abs(y0_override[i, j]) < abs(y0_base[i, j])
+
+
+def test_branch_zero_sequence_blocking_removes_direct_zero_sequence_path() -> None:
+    case = parse_matpower_case(_data_path("small_cases", "case3_sample.m"))
+
+    _y1, _y2, y0 = build_sequence_ybus(
+        case,
+        branch_zero_seq_scale=1.0,
+        zero_seq_blocked_branches={(1, 2)},
+    )
+
+    i = 0
+    j = 1
+    assert y0[i, j] == pytest.approx(0.0 + 0.0j, abs=1e-12)
