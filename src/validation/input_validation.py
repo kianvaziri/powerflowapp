@@ -90,7 +90,6 @@ def validate_case_data(case: PowerSystemCase) -> list[ValidationFinding]:
 
         # Treat exact duplicate oriented lines as likely data mistakes for UI validation.
         oriented = (branch.fbus, branch.tbus)
-        reverse = (branch.tbus, branch.fbus)
         branch_key = (
             min(oriented[0], oriented[1]),
             max(oriented[0], oriented[1]),

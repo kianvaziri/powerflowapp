@@ -10,6 +10,7 @@ from src.shortcircuit.fault_analysis import (
     analyze_fault,
     build_sequence_ybus,
     fault_current_rows,
+    fault_diagnostic_rows,
     post_fault_voltage_rows,
 )
 
@@ -23,5 +24,6 @@ __all__ = [
     "analyze_fault",
     "build_sequence_ybus",
     "fault_current_rows",
+    "fault_diagnostic_rows",
     "post_fault_voltage_rows",
 ]

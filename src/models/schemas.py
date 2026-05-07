@@ -20,6 +20,12 @@ class Bus:
     zone: int
     vmax: float
     vmin: float
+    seq_g1: float = 0.0
+    seq_b1: float = 0.0
+    seq_g2: float = 0.0
+    seq_b2: float = 0.0
+    seq_g0: float = 0.0
+    seq_b0: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -34,6 +40,14 @@ class Generator:
     status: int
     pmax: float
     pmin: float
+    r1: float | None = None
+    x1: float | None = None
+    r2: float | None = None
+    x2: float | None = None
+    r0: float | None = None
+    x0: float | None = None
+    rn: float = 0.0
+    xn: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -46,6 +60,13 @@ class Branch:
     ratio: float
     angle: float
     status: int
+    r2: float | None = None
+    x2: float | None = None
+    b2: float | None = None
+    r0: float | None = None
+    x0: float | None = None
+    b0: float | None = None
+    zero_sequence_status: int = 1
 
 
 @dataclass(frozen=True)

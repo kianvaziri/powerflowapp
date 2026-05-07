@@ -6,7 +6,7 @@ from dataclasses import dataclass
 
 import numpy as np
 
-from src.models import PowerSystemCase
+from src.models import Generator, PowerSystemCase
 from src.ybus.admittance_utils import series_admittance, tap_complex
 
 FAULT_TYPE_3PH = "3PH"
@@ -25,6 +25,7 @@ SUPPORTED_FAULT_TYPES = {
 DEFAULT_BRANCH_ZERO_SEQ_SCALE = 2.5
 
 A = np.exp(1j * 2.0 * np.pi / 3.0)
+_EPS = 1e-14
 
 
 @dataclass(frozen=True)
@@ -36,6 +37,11 @@ class FaultAnalysisResult:
     z0_th_pu: complex
     z1_th_pu: complex
     z2_th_pu: complex
+    fault_denominator_pu: complex
+    llg_parallel_denominator_pu: complex | None
+    z0_inversion_method: str
+    z1_inversion_method: str
+    z2_inversion_method: str
     i0_pu: complex
     i1_pu: complex
     i2_pu: complex
@@ -61,17 +67,14 @@ def build_sequence_ybus(
     zero_seq_blocked_branches: set[tuple[int, int]] | None = None,
     include_bus_shunts: bool = False,
     include_line_charging: bool = False,
+    sequence_data_on_gen_mbase: bool = True,
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
-    """Build positive, negative, and zero-sequence Y-bus approximations.
+    """Build positive, negative, and zero-sequence Y-bus matrices.
 
-    Assumptions used in this implementation:
-    - Positive sequence follows load-flow branch R/X data.
-    - Negative sequence uses the same branch R/X values, with opposite phase-shift
-      sign on tap angles.
-    - Zero sequence defaults to a scaled positive-sequence branch impedance model
-      when explicit sequence branch data is unavailable.
-    - Generator sequence reactances are modeled as shunts to ground at generator
-      buses for fault-network Thevenin construction.
+    Explicit sequence fields from the parsed case are used when available. If a
+    case file does not contain sequence data, the previous approximations remain
+    in effect: negative sequence follows positive sequence, and zero sequence is
+    estimated by scaling positive-sequence branch impedance.
     """
     if default_gen_xdpp_pu <= 0:
         raise ValueError("default_gen_xdpp_pu must be positive")
@@ -88,9 +91,12 @@ def build_sequence_ybus(
     y2 = np.zeros((nbus, nbus), dtype=complex)
     y0 = np.zeros((nbus, nbus), dtype=complex)
 
-    if include_bus_shunts:
-        for bus in case.buses:
-            idx = bus_to_idx[bus.bus_i]
+    for bus in case.buses:
+        idx = bus_to_idx[bus.bus_i]
+        y1[idx, idx] += complex(bus.seq_g1, bus.seq_b1)
+        y2[idx, idx] += complex(bus.seq_g2, bus.seq_b2)
+        y0[idx, idx] += complex(bus.seq_g0, bus.seq_b0)
+        if include_bus_shunts:
             y_shunt = complex(bus.gs, bus.bs) / case.base_mva
             y1[idx, idx] += y_shunt
             y2[idx, idx] += y_shunt
@@ -106,53 +112,62 @@ def build_sequence_ybus(
         i = bus_to_idx[branch.fbus]
         j = bus_to_idx[branch.tbus]
 
-        shunt_b = branch.b if include_line_charging else 0.0
-
-        # Positive sequence.
+        shunt_b1 = branch.b if include_line_charging else 0.0
         _stamp_branch(
             ybus=y1,
             i=i,
             j=j,
             r=branch.r,
             x=branch.x,
-            shunt_b=shunt_b,
+            shunt_b=shunt_b1,
             tap_ratio=branch.ratio,
             tap_angle_deg=branch.angle,
         )
 
-        # Negative sequence (phase shift sign reverses).
+        r2 = branch.r if branch.r2 is None else branch.r2
+        x2 = branch.x if branch.x2 is None else branch.x2
+        b2 = branch.b if branch.b2 is None else branch.b2
+        shunt_b2 = b2 if include_line_charging else 0.0
         _stamp_branch(
             ybus=y2,
             i=i,
             j=j,
-            r=branch.r,
-            x=branch.x,
-            shunt_b=shunt_b,
+            r=r2,
+            x=x2,
+            shunt_b=shunt_b2,
             tap_ratio=branch.ratio,
             tap_angle_deg=-branch.angle,
         )
 
-        # Zero sequence (scaled branch impedance approximation).
         branch_key = _branch_key(branch.fbus, branch.tbus)
-        if branch_key in blocked_zero_seq:
+        if branch_key in blocked_zero_seq or branch.zero_sequence_status == 0:
             continue
 
-        z_pos = complex(branch.r, branch.x)
-        if abs(z_pos) < 1e-14:
-            raise ValueError("Branch impedance r + jx is zero; cannot compute sequence admittance")
-
-        local_scale = branch_scale_map.get(branch_key, branch_zero_seq_scale)
-        if local_scale <= 0:
-            raise ValueError(f"Branch zero-sequence scale must be positive for branch {branch.fbus}-{branch.tbus}")
-        z_zero = local_scale * z_pos
+        if branch.r0 is not None and branch.x0 is not None:
+            r0 = branch.r0
+            x0 = branch.x0
+            b0 = branch.b0 if branch.b0 is not None else 0.0
+        else:
+            z_pos = complex(branch.r, branch.x)
+            if abs(z_pos) < _EPS:
+                raise ValueError("Branch impedance r + jx is zero; cannot compute sequence admittance")
+            local_scale = branch_scale_map.get(branch_key, branch_zero_seq_scale)
+            if local_scale <= 0:
+                raise ValueError(
+                    f"Branch zero-sequence scale must be positive for branch {branch.fbus}-{branch.tbus}"
+                )
+            z_zero = local_scale * z_pos
+            r0 = float(z_zero.real)
+            x0 = float(z_zero.imag)
+            b0 = branch.b if include_line_charging else 0.0
 
         _stamp_branch(
             ybus=y0,
             i=i,
             j=j,
-            r=float(z_zero.real),
-            x=float(z_zero.imag),
-            shunt_b=shunt_b,
+            r=r0,
+            x=x0,
+            shunt_b=b0 if include_line_charging else 0.0,
             tap_ratio=branch.ratio,
             tap_angle_deg=0.0,
         )
@@ -168,16 +183,19 @@ def build_sequence_ybus(
             raise ValueError(f"Generator references unknown bus {gen.bus}")
 
         idx = bus_to_idx[gen.bus]
-        x1 = x1_map.get(gen.bus, default_gen_xdpp_pu)
-        x2 = x2_map.get(gen.bus, x1)
-        x0 = x0_map.get(gen.bus, x1)
+        z1, z2, z0 = _generator_sequence_impedances(
+            gen=gen,
+            case_base_mva=case.base_mva,
+            default_gen_xdpp_pu=default_gen_xdpp_pu,
+            gen_x1_pu_by_bus=x1_map,
+            gen_x2_pu_by_bus=x2_map,
+            gen_x0_pu_by_bus=x0_map,
+            sequence_data_on_gen_mbase=sequence_data_on_gen_mbase,
+        )
 
-        if x1 <= 0 or x2 <= 0 or x0 <= 0:
-            raise ValueError("Generator sequence reactances must be positive")
-
-        y1[idx, idx] += 1.0 / (1j * x1)
-        y2[idx, idx] += 1.0 / (1j * x2)
-        y0[idx, idx] += 1.0 / (1j * x0)
+        y1[idx, idx] += _safe_admittance(z1, f"Generator {gen.bus} positive-sequence impedance is zero")
+        y2[idx, idx] += _safe_admittance(z2, f"Generator {gen.bus} negative-sequence impedance is zero")
+        y0[idx, idx] += _safe_admittance(z0, f"Generator {gen.bus} zero-sequence impedance path is zero")
 
     return y1, y2, y0
 
@@ -197,6 +215,7 @@ def analyze_fault(
     zero_seq_blocked_branches: set[tuple[int, int]] | None = None,
     include_bus_shunts: bool = False,
     include_line_charging: bool = False,
+    sequence_data_on_gen_mbase: bool = True,
 ) -> FaultAnalysisResult:
     """Analyze a short-circuit fault using sequence-network methods."""
     if len(pre_fault_voltages) != len(case.buses):
@@ -224,11 +243,12 @@ def analyze_fault(
         zero_seq_blocked_branches=zero_seq_blocked_branches,
         include_bus_shunts=include_bus_shunts,
         include_line_charging=include_line_charging,
+        sequence_data_on_gen_mbase=sequence_data_on_gen_mbase,
     )
 
-    z1 = _inverse_stable(y1)
-    z2 = _inverse_stable(y2)
-    z0 = _inverse_stable(y0)
+    z1, z1_method = _inverse_with_method(y1)
+    z2, z2_method = _inverse_with_method(y2)
+    z0, z0_method = _inverse_with_method(y0)
 
     v_prefault = pre_fault_voltages.astype(complex)
     v1_th = v_prefault[k]
@@ -236,7 +256,7 @@ def analyze_fault(
     z2_th = z2[k, k]
     z0_th = z0[k, k]
 
-    i0, i1, i2 = _solve_sequence_currents(
+    i0, i1, i2, fault_denominator, llg_parallel_denominator = _solve_sequence_currents(
         fault_code=fault_code,
         v1_th=v1_th,
         z1_th=z1_th,
@@ -260,6 +280,11 @@ def analyze_fault(
         z0_th_pu=z0_th,
         z1_th_pu=z1_th,
         z2_th_pu=z2_th,
+        fault_denominator_pu=fault_denominator,
+        llg_parallel_denominator_pu=llg_parallel_denominator,
+        z0_inversion_method=z0_method,
+        z1_inversion_method=z1_method,
+        z2_inversion_method=z2_method,
         i0_pu=i0,
         i1_pu=i1,
         i2_pu=i2,
@@ -297,6 +322,47 @@ def fault_current_rows(result: FaultAnalysisResult) -> list[dict[str, float | st
     return rows
 
 
+def fault_diagnostic_rows(result: FaultAnalysisResult) -> list[dict[str, float | str | int]]:
+    """Return Thevenin and denominator diagnostics for PowerWorld comparisons."""
+    rows: list[dict[str, float | str | int]] = []
+
+    def _complex_row(name: str, value: complex, method: str = "", note: str = "") -> dict[str, float | str | int]:
+        return {
+            "quantity": name,
+            "real_pu": float(value.real),
+            "imag_pu": float(value.imag),
+            "mag_pu": float(abs(value)),
+            "ang_deg": float(np.degrees(np.angle(value))),
+            "method": method,
+            "note": note,
+        }
+
+    rows.append(_complex_row("Z0_th", result.z0_th_pu, result.z0_inversion_method))
+    rows.append(_complex_row("Z1_th", result.z1_th_pu, result.z1_inversion_method))
+    rows.append(_complex_row("Z2_th", result.z2_th_pu, result.z2_inversion_method))
+    rows.append(_complex_row("Fault impedance Zf", result.fault_impedance_pu))
+
+    if result.fault_type == FAULT_TYPE_LG:
+        denominator_name = "SLG denominator Z0+Z1+Z2+3Zf"
+    elif result.fault_type == FAULT_TYPE_3PH:
+        denominator_name = "3PH denominator Z1+Zf"
+    elif result.fault_type == FAULT_TYPE_LL:
+        denominator_name = "LL denominator Z1+Z2+Zf"
+    else:
+        denominator_name = "DLG denominator Z1+parallel(Z2, Z0+3Zf)"
+    rows.append(_complex_row(denominator_name, result.fault_denominator_pu))
+
+    if result.llg_parallel_denominator_pu is not None:
+        rows.append(
+            _complex_row(
+                "DLG parallel denominator Z2+Z0+3Zf",
+                result.llg_parallel_denominator_pu,
+            )
+        )
+
+    return rows
+
+
 def post_fault_voltage_rows(
     case: PowerSystemCase,
     result: FaultAnalysisResult,
@@ -328,34 +394,86 @@ def _solve_sequence_currents(
     z2_th: complex,
     z0_th: complex,
     zf: complex,
-) -> tuple[complex, complex, complex]:
+) -> tuple[complex, complex, complex, complex, complex | None]:
     if fault_code == FAULT_TYPE_3PH:
         den = z1_th + zf
         i1 = _safe_div(v1_th, den, "3PH fault denominator is zero")
-        return 0.0 + 0.0j, i1, 0.0 + 0.0j
+        return 0.0 + 0.0j, i1, 0.0 + 0.0j, den, None
 
     if fault_code == FAULT_TYPE_LG:
         den = z1_th + z2_th + z0_th + 3.0 * zf
         i1 = _safe_div(v1_th, den, "LG fault denominator is zero")
-        return i1, i1, i1
+        return i1, i1, i1, den, None
 
     if fault_code == FAULT_TYPE_LL:
         den = z1_th + z2_th + zf
         i1 = _safe_div(v1_th, den, "LL fault denominator is zero")
         i2 = -i1
-        return 0.0 + 0.0j, i1, i2
+        return 0.0 + 0.0j, i1, i2, den, None
 
-    # LLG fault
     den_parallel = z2_th + z0_th + 3.0 * zf
-    if abs(den_parallel) < 1e-14:
+    if abs(den_parallel) < _EPS:
         raise ValueError("LLG fault denominator is zero")
 
     z_eq = (z2_th * (z0_th + 3.0 * zf)) / den_parallel
-    i1 = _safe_div(v1_th, z1_th + z_eq, "LLG fault denominator is zero")
+    den = z1_th + z_eq
+    i1 = _safe_div(v1_th, den, "LLG fault denominator is zero")
     i2 = -i1 * (z0_th + 3.0 * zf) / den_parallel
     i0 = -i1 * z2_th / den_parallel
-    return i0, i1, i2
+    return i0, i1, i2, den, den_parallel
 
+
+def _generator_sequence_impedances(
+    gen: Generator,
+    case_base_mva: float,
+    default_gen_xdpp_pu: float,
+    gen_x1_pu_by_bus: dict[int, float],
+    gen_x2_pu_by_bus: dict[int, float],
+    gen_x0_pu_by_bus: dict[int, float],
+    sequence_data_on_gen_mbase: bool,
+) -> tuple[complex, complex, complex]:
+    z_default = complex(0.0, default_gen_xdpp_pu)
+    z1_raw = _generator_sequence_impedance_raw(gen, 1, gen_x1_pu_by_bus, z_default)
+    z2_raw = _generator_sequence_impedance_raw(gen, 2, gen_x2_pu_by_bus, z1_raw)
+    z0_raw = _generator_sequence_impedance_raw(gen, 0, gen_x0_pu_by_bus, z1_raw)
+    zn_raw = complex(gen.rn, gen.xn)
+
+    z1 = _to_system_base(z1_raw, gen, case_base_mva, sequence_data_on_gen_mbase)
+    z2 = _to_system_base(z2_raw, gen, case_base_mva, sequence_data_on_gen_mbase)
+    z0 = _to_system_base(z0_raw + 3.0 * zn_raw, gen, case_base_mva, sequence_data_on_gen_mbase)
+    return z1, z2, z0
+
+
+def _generator_sequence_impedance_raw(
+    gen: Generator,
+    sequence: int,
+    override_by_bus: dict[int, float],
+    fallback: complex,
+) -> complex:
+    if gen.bus in override_by_bus:
+        return complex(0.0, override_by_bus[gen.bus])
+
+    r_attr = f"r{sequence}"
+    x_attr = f"x{sequence}"
+    r_value = getattr(gen, r_attr)
+    x_value = getattr(gen, x_attr)
+    if x_value is None:
+        return fallback
+    return complex(0.0 if r_value is None else float(r_value), float(x_value))
+
+
+def _to_system_base(z_pu: complex, gen: Generator, case_base_mva: float, enabled: bool) -> complex:
+    if not enabled:
+        return z_pu
+    if gen.mbase <= 0.0:
+        raise ValueError(f"Generator at bus {gen.bus} has non-positive mBase")
+    return z_pu * (case_base_mva / gen.mbase)
+
+
+def _safe_admittance(z: complex, err_msg: str) -> complex:
+    if abs(z) < _EPS:
+        raise ValueError(err_msg)
+    return 1.0 / z
 
 
 def _branch_key(fbus: int, tbus: int) -> tuple[int, int]:
@@ -385,16 +503,16 @@ def _stamp_branch(
 
 
 def _safe_div(num: complex, den: complex, err_msg: str) -> complex:
-    if abs(den) < 1e-14:
+    if abs(den) < _EPS:
         raise ValueError(err_msg)
     return num / den
 
 
-def _inverse_stable(y: np.ndarray) -> np.ndarray:
+def _inverse_with_method(y: np.ndarray) -> tuple[np.ndarray, str]:
     try:
-        return np.linalg.inv(y)
+        return np.linalg.inv(y), "inverse"
     except np.linalg.LinAlgError:
-        return np.linalg.pinv(y)
+        return np.linalg.pinv(y), "pseudo-inverse"
 
 
 def _sequence_to_phase(

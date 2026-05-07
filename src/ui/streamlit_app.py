@@ -19,7 +19,7 @@ from src.parser import parse_matpower_case
 from src.powerflow.gs import solve_gauss_seidel
 from src.powerflow.line_flow import compute_line_flows, compute_power_balance
 from src.powerflow.nr import solve_newton_raphson
-from src.shortcircuit import analyze_fault, fault_current_rows, post_fault_voltage_rows
+from src.shortcircuit import analyze_fault, fault_current_rows, fault_diagnostic_rows, post_fault_voltage_rows
 from src.validation import has_validation_errors, validate_case_data
 from src.ybus import build_ybus
 
@@ -28,6 +28,7 @@ def _default_case_options() -> dict[str, Path]:
     root = Path(__file__).resolve().parents[2]
     return {
         "IEEE 14-bus": root / "data" / "raw" / "ieee14" / "case14_sample.m",
+        "IEEE 14-bus literature sequence": root / "data" / "raw" / "ieee14" / "case14_literature_sequence.m",
         "3-bus baseline": root / "data" / "raw" / "small_cases" / "case3_sample.m",
         "3-bus PV example": root / "data" / "raw" / "small_cases" / "case3_gs_pv_sample.m",
     }
@@ -71,8 +72,25 @@ def _load_case_from_selection(options: dict[str, Path], selected_case_name: str,
 def _apply_theme_css() -> None:
     css = """
     <style>
-    .stApp { background-color: #0e1117; color: #e6edf3; font-size: 1.04rem; }
-    [data-testid="stSidebar"] { background-color: #161b22; font-size: 1.02rem; }
+    :root {
+        --gs-bg: var(--st-background-color, var(--background-color, #ffffff));
+        --gs-surface: var(--st-secondary-background-color, var(--secondary-background-color, #f0f2f6));
+        --gs-border: var(--st-border-color, rgba(128, 128, 128, 0.35));
+        --gs-text: var(--st-text-color, var(--text-color, #262730));
+        --gs-primary: var(--st-primary-color, var(--primary-color, #2563eb));
+        --gs-primary-soft: color-mix(in srgb, var(--gs-surface) 82%, var(--gs-primary) 18%);
+        --gs-primary-hover: color-mix(in srgb, var(--gs-surface) 70%, var(--gs-primary) 30%);
+        --gs-disabled: var(--st-border-color-light, rgba(128, 128, 128, 0.5));
+    }
+
+    .stApp {
+        font-size: 1.04rem;
+        color: var(--gs-text);
+        background-color: var(--gs-bg);
+    }
+
+    [data-testid="stSidebar"] { font-size: 1.02rem; }
+
     [data-testid="stMarkdownContainer"] p,
     [data-testid="stCaptionContainer"] p,
     label,
@@ -83,61 +101,113 @@ def _apply_theme_css() -> None:
     .stNumberInput label,
     .stFileUploader label {
         font-size: 1.05rem;
+        color: var(--gs-text) !important;
     }
-    [data-testid="stMetricValue"] { color: #e6edf3; font-size: 1.55rem; }
-    [data-testid="stMetricLabel"] p { font-size: 1.03rem; }
+
+    [data-testid="stMetricValue"] { color: var(--gs-text) !important; font-size: 1.55rem; }
+    [data-testid="stMetricLabel"] p { font-size: 1.03rem; color: var(--gs-text) !important; }
     div[data-testid="stDataFrame"] { font-size: 1.04rem; }
     [data-testid="stTable"] table { font-size: 1.1rem; }
     [data-testid="stTable"] th,
     [data-testid="stTable"] td { padding: 0.45rem 0.6rem; }
-    .workflow-step { padding: 0.25rem 0.4rem; border-radius: 0.4rem; background: #1f2937; }
+
+    .workflow-step {
+        padding: 0.25rem 0.4rem;
+        border-radius: 0.4rem;
+        background: color-mix(in srgb, var(--gs-surface) 92%, transparent);
+    }
+
     div.stButton > button {
         width: 100%;
         min-height: 3.15rem;
         border-radius: 0.75rem;
-        border: 1px solid #2f3947;
-        background: #1f2937;
-        color: #e6edf3;
+        border: 1px solid var(--gs-border) !important;
+        background: var(--gs-surface) !important;
+        color: var(--gs-text) !important;
+        -webkit-text-fill-color: var(--gs-text) !important;
+        -webkit-appearance: none;
+        appearance: none;
         font-family: Calibri, "Segoe UI", sans-serif;
         font-size: 1.06rem;
         font-weight: 650;
         letter-spacing: 0.01em;
-        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.35);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.12);
         transition: all 0.18s ease;
     }
-    div.stButton > button:hover:not(:disabled) {
-        background: #273244;
-        border-color: #475569;
+
+    div.stButton > button * {
+        color: inherit !important;
+        -webkit-text-fill-color: inherit !important;
     }
+
+    div.stButton > button:hover:not(:disabled) {
+        border-color: var(--gs-primary) !important;
+        background: color-mix(in srgb, var(--gs-surface) 80%, var(--gs-primary) 20%) !important;
+        color: var(--gs-text) !important;
+        -webkit-text-fill-color: var(--gs-text) !important;
+    }
+
     div.stButton > button:active:not(:disabled) {
         transform: translateY(1px);
     }
+
     div.stButton > button:focus {
         outline: none;
-        box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.35);
+        box-shadow: 0 0 0 0.2rem color-mix(in srgb, var(--gs-primary) 35%, transparent);
     }
-    div.stButton > button[kind="primary"] {
-        background: #2563eb;
-        color: #ffffff;
-        border-color: #1d4ed8;
+
+    div.stButton > button[kind="primary"],
+    div.stButton > button[data-testid="baseButton-primary"],
+    div.stButton > button[data-testid="stBaseButton-primary"] {
+        background: var(--gs-primary-soft) !important;
+        color: var(--gs-text) !important;
+        -webkit-text-fill-color: var(--gs-text) !important;
+        border-color: var(--gs-primary) !important;
     }
-    div.stButton > button[kind="primary"]:hover:not(:disabled) {
-        background: #1d4ed8;
-        border-color: #1e40af;
+
+    div.stButton > button[kind="primary"] *,
+    div.stButton > button[data-testid="baseButton-primary"] *,
+    div.stButton > button[data-testid="stBaseButton-primary"] * {
+        color: var(--gs-text) !important;
+        -webkit-text-fill-color: var(--gs-text) !important;
     }
+
+    div.stButton > button[kind="primary"]:hover:not(:disabled),
+    div.stButton > button[data-testid="baseButton-primary"]:hover:not(:disabled),
+    div.stButton > button[data-testid="stBaseButton-primary"]:hover:not(:disabled),
+    div.stButton > button[kind="primary"]:focus:not(:disabled),
+    div.stButton > button[data-testid="baseButton-primary"]:focus:not(:disabled),
+    div.stButton > button[data-testid="stBaseButton-primary"]:focus:not(:disabled),
+    div.stButton > button[kind="primary"]:active:not(:disabled),
+    div.stButton > button[data-testid="baseButton-primary"]:active:not(:disabled),
+    div.stButton > button[data-testid="stBaseButton-primary"]:active:not(:disabled) {
+        background: var(--gs-primary-hover) !important;
+        border-color: var(--gs-primary-hover) !important;
+        color: var(--gs-text) !important;
+        -webkit-text-fill-color: var(--gs-text) !important;
+    }
+
     div.stButton > button:disabled {
-        background: #111827;
-        color: #6b7280;
-        border-color: #374151;
         opacity: 1;
+        color: var(--gs-disabled) !important;
+        -webkit-text-fill-color: var(--gs-disabled) !important;
+        border-color: var(--gs-border) !important;
         cursor: not-allowed;
         box-shadow: none;
     }
+
+    div.stButton > button:disabled * {
+        color: var(--gs-disabled) !important;
+        -webkit-text-fill-color: var(--gs-disabled) !important;
+    }
+
     div.stDownloadButton > button {
         border-radius: 0.65rem;
         min-height: 2.65rem;
         font-family: Calibri, "Segoe UI", sans-serif;
         font-size: 1.03rem;
+        color: var(--gs-text) !important;
+        -webkit-text-fill-color: var(--gs-text) !important;
     }
     </style>
     """
@@ -166,6 +236,7 @@ def _init_state() -> None:
         "balance_rows": [],
         "fault_done": False,
         "fault_rows_current": [],
+        "fault_rows_diagnostic": [],
         "fault_rows_voltage": [],
         "fault_summary": None,
         "export_panel_open": False,
@@ -191,6 +262,7 @@ def _reset_after_load() -> None:
     st.session_state.balance_rows = []
     st.session_state.fault_done = False
     st.session_state.fault_rows_current = []
+    st.session_state.fault_rows_diagnostic = []
     st.session_state.fault_rows_voltage = []
     st.session_state.fault_summary = None
     st.session_state.export_panel_open = False
@@ -205,6 +277,7 @@ def _reset_after_ybus() -> None:
     st.session_state.balance_rows = []
     st.session_state.fault_done = False
     st.session_state.fault_rows_current = []
+    st.session_state.fault_rows_diagnostic = []
     st.session_state.fault_rows_voltage = []
     st.session_state.fault_summary = None
 
@@ -576,6 +649,11 @@ def main() -> None:
         )
         fault_include_bus_shunts = st.checkbox("Include bus shunts in sequence networks", value=False)
         fault_include_line_charging = st.checkbox("Include line charging in sequence networks", value=False)
+        sequence_on_gen_mbase = st.checkbox(
+            "Generator sequence data uses generator MVA base",
+            value=True,
+            help="Matches most short-circuit tools: generator R/X sequence values are converted to the system base.",
+        )
         branch_scale_text = st.text_area(
             "Branch Z0/Z1 overrides (JSON: {'4-7': 3.0})",
             value="{}",
@@ -742,6 +820,7 @@ def main() -> None:
 
                 st.session_state.fault_done = False
                 st.session_state.fault_rows_current = []
+                st.session_state.fault_rows_diagnostic = []
                 st.session_state.fault_rows_voltage = []
                 st.session_state.fault_summary = None
 
@@ -799,10 +878,12 @@ def main() -> None:
                     zero_seq_blocked_branches=blocked_zero_seq,
                     include_bus_shunts=bool(fault_include_bus_shunts),
                     include_line_charging=bool(fault_include_line_charging),
+                    sequence_data_on_gen_mbase=bool(sequence_on_gen_mbase),
                 )
 
                 st.session_state.fault_done = True
                 st.session_state.fault_rows_current = fault_current_rows(fault_result)
+                st.session_state.fault_rows_diagnostic = fault_diagnostic_rows(fault_result)
                 st.session_state.fault_rows_voltage = post_fault_voltage_rows(case, fault_result)
                 st.session_state.fault_summary = {
                     "fault_type": fault_type_label,
@@ -816,12 +897,14 @@ def main() -> None:
                     "blocked_zero_seq_count": len(blocked_zero_seq),
                     "include_bus_shunts": bool(fault_include_bus_shunts),
                     "include_line_charging": bool(fault_include_line_charging),
+                    "sequence_on_gen_mbase": bool(sequence_on_gen_mbase),
                     "note": fault_note,
                 }
                 st.success("Fault study completed.")
             except Exception as exc:  # pylint: disable=broad-except
                 st.session_state.fault_done = False
                 st.session_state.fault_rows_current = []
+                st.session_state.fault_rows_diagnostic = []
                 st.session_state.fault_rows_voltage = []
                 st.session_state.fault_summary = None
                 st.error(f"Fault study failed: {exc}")
@@ -919,13 +1002,17 @@ def main() -> None:
             f"branch overrides={summary['branch_scale_override_count']}, "
             f"blocked Z0 branches={summary['blocked_zero_seq_count']}, "
             f"include bus shunts={summary['include_bus_shunts']}, "
-            f"include line charging={summary['include_line_charging']}"
+            f"include line charging={summary['include_line_charging']}, "
+            f"gen sequence on mBase={summary.get('sequence_on_gen_mbase', True)}"
         )
         if summary["note"]:
             st.warning(summary["note"])
 
         st.markdown(f"**Fault Currents ({data_form_label})**")
         _show_dataframe(current_rows)
+
+        st.markdown("**Fault Diagnostics**")
+        _show_dataframe(st.session_state.fault_rows_diagnostic)
 
         st.markdown(f"**Post-Fault Bus Voltages ({data_form_label})**")
         _show_dataframe(voltage_rows)
@@ -990,6 +1077,11 @@ def main() -> None:
                 _to_csv_bytes(_fault_voltage_rows_by_form(st.session_state.fault_rows_voltage, data_form)),
                 "text/csv",
             )
+            available["Fault Diagnostics"] = (
+                "fault_diagnostics.csv",
+                _to_csv_bytes(st.session_state.fault_rows_diagnostic),
+                "text/csv",
+            )
 
         summary_lines: list[str] = []
         if st.session_state.case_loaded:
@@ -1005,6 +1097,7 @@ def main() -> None:
             summary_lines.append(f"Fault type: {fs['fault_type']}")
             summary_lines.append(f"Fault bus used: {fs['fault_bus_used']}")
             summary_lines.append(f"|Ia| (p.u.): {fs['ia_mag']:.6e}")
+            summary_lines.append(f"Generator sequence data on mBase: {fs.get('sequence_on_gen_mbase', True)}")
 
         if summary_lines:
             available["Summary Text"] = (
