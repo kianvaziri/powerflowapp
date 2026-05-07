@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import csv
+import html
 import hashlib
 import io
 import json
@@ -29,6 +30,7 @@ def _default_case_options() -> dict[str, Path]:
     return {
         "IEEE 14-bus": root / "data" / "raw" / "ieee14" / "case14_sample.m",
         "IEEE 14-bus literature sequence": root / "data" / "raw" / "ieee14" / "case14_literature_sequence.m",
+        "IEEE 14-bus PowerWorld branch sequence": root / "data" / "raw" / "ieee14" / "case14_powerworld_branch_sequence.m",
         "3-bus baseline": root / "data" / "raw" / "small_cases" / "case3_sample.m",
         "3-bus PV example": root / "data" / "raw" / "small_cases" / "case3_gs_pv_sample.m",
     }
@@ -577,6 +579,169 @@ def _show_large_table(data) -> None:
     st.table(data)
 
 
+def _theme_plot_colors() -> dict[str, str]:
+    theme_base = st.get_option("theme.base") or "light"
+    if theme_base == "dark":
+        return {
+            "text": "#e5e7eb",
+            "line": "#94a3b8",
+            "bus": "#60a5fa",
+            "pq": "#60a5fa",
+            "pv": "#34d399",
+            "slack": "#f59e0b",
+            "background": "#0f172a",
+            "tooltip_bg": "#111827",
+            "tooltip_border": "#475569",
+            "tooltip_text": "#f8fafc",
+        }
+    return {
+        "text": "#1f2937",
+        "line": "#64748b",
+        "bus": "#2563eb",
+        "pq": "#2563eb",
+        "pv": "#059669",
+        "slack": "#d97706",
+        "background": "#ffffff",
+        "tooltip_bg": "#ffffff",
+        "tooltip_border": "#cbd5e1",
+        "tooltip_text": "#111827",
+    }
+
+
+def _topology_positions(case) -> dict[int, tuple[float, float]]:
+    bus_ids = [bus.bus_i for bus in case.buses]
+    total = len(bus_ids)
+    if total == 0:
+        return {}
+
+    positions: dict[int, tuple[float, float]] = {}
+    start_angle = np.pi / 2.0
+    for idx, bus_id in enumerate(bus_ids):
+        angle = start_angle - (2.0 * np.pi * idx / total)
+        positions[bus_id] = (float(np.cos(angle)), float(np.sin(angle)))
+    return positions
+
+
+def _plot_case_topology(case) -> None:
+    positions = _topology_positions(case)
+    if not positions:
+        st.info("No buses available to draw.")
+        return
+
+    colors = _theme_plot_colors()
+    canvas_size = 647
+    center = canvas_size / 2.0
+    layout_radius = canvas_size * 0.37
+    node_radius = 18
+    slack_radius = 20
+    font_size = 11.25
+    tooltip_width = 230
+    tooltip_height = 46
+
+    def to_canvas(point: tuple[float, float]) -> tuple[float, float]:
+        x, y = point
+        return center + (x * layout_radius), center - (y * layout_radius)
+
+    def tooltip_origin(x: float, y: float) -> tuple[float, float]:
+        tooltip_x = min(max(x + 16, 8), canvas_size - tooltip_width - 8)
+        tooltip_y = min(max(y - tooltip_height - 16, 8), canvas_size - tooltip_height - 8)
+        return tooltip_x, tooltip_y
+
+    def tooltip_svg(x: float, y: float, line_1: str, line_2: str) -> str:
+        tx, ty = tooltip_origin(x, y)
+        first = html.escape(line_1)
+        second = html.escape(line_2)
+        return (
+            f"<g class='topology-tooltip' transform='translate({tx:.1f} {ty:.1f})'>"
+            f"<rect width='{tooltip_width}' height='{tooltip_height}' rx='6' fill='{colors['tooltip_bg']}' "
+            f"stroke='{colors['tooltip_border']}' stroke-width='1' opacity='0.98' />"
+            f"<text x='10' y='18' font-family='Calibri, Arial, sans-serif' font-size='12' "
+            f"font-weight='700' fill='{colors['tooltip_text']}'>{first}</text>"
+            f"<text x='10' y='36' font-family='Calibri, Arial, sans-serif' font-size='11' "
+            f"fill='{colors['tooltip_text']}'>{second}</text></g>"
+        )
+
+    def bus_color(bus_type: int) -> str:
+        if bus_type == 3:
+            return colors["slack"]
+        if bus_type == 2:
+            return colors["pv"]
+        return colors["pq"]
+
+    branch_elements: list[str] = []
+    for branch in case.branches:
+        if branch.status == 0:
+            continue
+        start = positions.get(branch.fbus)
+        end = positions.get(branch.tbus)
+        if start is None or end is None:
+            continue
+        x1, y1 = to_canvas(start)
+        x2, y2 = to_canvas(end)
+        mid_x = (x1 + x2) / 2.0
+        mid_y = (y1 + y2) / 2.0
+        branch_elements.append(
+            f"<g class='topology-item'>"
+            f"<line x1='{x1:.1f}' y1='{y1:.1f}' x2='{x2:.1f}' y2='{y2:.1f}' "
+            f"stroke='{colors['line']}' stroke-width='2' stroke-linecap='round' opacity='0.88' />"
+            f"<line x1='{x1:.1f}' y1='{y1:.1f}' x2='{x2:.1f}' y2='{y2:.1f}' "
+            f"stroke='transparent' stroke-width='18' stroke-linecap='round' />"
+            f"{tooltip_svg(mid_x, mid_y, f'Branch {branch.fbus} -> {branch.tbus}', f'r={branch.r:.5f}, x={branch.x:.5f}, b={branch.b:.5f}')}"
+            f"</g>"
+        )
+
+    bus_elements: list[str] = []
+    for bus in case.buses:
+        x, y = to_canvas(positions[bus.bus_i])
+        is_slack = bus.bus_type == 3
+        radius = slack_radius if is_slack else node_radius
+        fill = bus_color(bus.bus_type)
+        bus_type = {1: "PQ", 2: "PV", 3: "Slack"}.get(bus.bus_type, str(bus.bus_type))
+        bus_elements.append(
+            f"<g class='topology-item' style='cursor:default;'>"
+            f"<circle cx='{x:.1f}' cy='{y:.1f}' r='{radius}' fill='{fill}' stroke='{colors['background']}' stroke-width='2' />"
+            f"<text x='{x:.1f}' y='{y + 2:.1f}' text-anchor='middle' font-family='Calibri, Arial, sans-serif' "
+            f"font-size='{font_size}' font-weight='600' fill='#ffffff'>{bus.bus_i}</text>"
+            f"{tooltip_svg(x, y, f'Bus {bus.bus_i} ({bus_type})', f'Pd={bus.pd:.3f} MW, Qd={bus.qd:.3f} MVAr')}"
+            f"</g>"
+        )
+
+    legend_items = [
+        ("PQ", colors["pq"]),
+        ("PV", colors["pv"]),
+        ("Slack", colors["slack"]),
+    ]
+    legend = "".join(
+        f"<span style='display:inline-flex; align-items:center; gap:0.35rem; margin:0 0.55rem;'>"
+        f"<span style='width:0.7rem; height:0.7rem; border-radius:50%; background:{color}; "
+        f"display:inline-block;'></span>{html.escape(label)}</span>"
+        for label, color in legend_items
+    )
+
+    svg = f"""
+    <div style='display:flex; justify-content:center; width:100%; margin:0.25rem 0 0.5rem 0;'>
+      <div>
+        <style>
+          .topology-tooltip {{ opacity: 0; pointer-events: none; transition: opacity 120ms ease; }}
+          .topology-item:hover .topology-tooltip {{ opacity: 1; }}
+          .topology-item:hover circle {{ filter: brightness(1.08); }}
+          .topology-item:hover line:first-child {{ stroke-width: 3; }}
+        </style>
+        <svg width='{canvas_size}' height='{canvas_size}' viewBox='0 0 {canvas_size} {canvas_size}' role='img'
+             aria-label='Bus topology diagram'
+             style='background:{colors["background"]}; border:1px solid {colors["line"]}22; border-radius:12px; max-width:100%;'>
+          {''.join(branch_elements)}
+          {''.join(bus_elements)}
+        </svg>
+        <div style='display:flex; justify-content:center; flex-wrap:wrap; font-family:Calibri, Arial, sans-serif; font-size:1.08rem; color:{colors['text']}; margin-top:0.45rem;'>
+          {legend}
+        </div>
+      </div>
+    </div>
+    """
+    st.components.v1.html(svg, height=canvas_size + 76)
+
+
 def main() -> None:
     st.set_page_config(page_title="GridSolver", layout="wide")
     _init_state()
@@ -930,6 +1095,10 @@ def main() -> None:
 
     if st.session_state.case_loaded:
         st.info(f"Loaded case: {st.session_state.case_label}")
+        if st.session_state.case is not None:
+            st.subheader("System Topology")
+            st.caption("Buses are arranged on a circle; straight lines show branch connectivity.")
+            _plot_case_topology(st.session_state.case)
 
     if st.session_state.validation_ran:
         st.subheader("Validation Results")

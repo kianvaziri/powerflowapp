@@ -107,3 +107,14 @@ def test_ieee14_literature_sequence_case_parses() -> None:
     assert case.generators[0].x1 == pytest.approx(0.007)
     assert case.branches[7].x0 == pytest.approx(0.048)
 
+def test_ieee14_powerworld_branch_sequence_case_parses() -> None:
+    case_path = Path(__file__).resolve().parents[2] / "data" / "raw" / "ieee14" / "case14_powerworld_branch_sequence.m"
+
+    case = parse_matpower_case(case_path)
+
+    assert len(case.buses) == 14
+    assert len(case.generators) == 5
+    assert len(case.branches) == 20
+    assert case.branches[0].r0 == pytest.approx(0.05)
+    assert case.branches[7].x0 == pytest.approx(0.52)
+
